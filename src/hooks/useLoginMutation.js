@@ -1,7 +1,7 @@
 import { useMutation } from "@tanstack/react-query";
 
 const loginUser = async ({ username, password }) => {
-  const response = await fetch("https://localhost:5031/api/Auth/login", {
+  const response = await fetch("http://localhost:5031/api/Auth/login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ username, PasswordHash: password }),

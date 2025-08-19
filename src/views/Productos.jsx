@@ -9,7 +9,7 @@ const fetchProductos = async () => {
   const res = await fetch("http://localhost:5031/api/Productos", {
     headers: { Authorization: `Bearer ${token}` },
   });
-  if (res.status === 401) throw new Error("No autorizado. Debes iniciar sesión.");
+  if (res.status === 401) throw new Error("Token inválido o expirado.");
   if (!res.ok) {
     const errorText = await res.text();
     throw new Error(errorText || "Error al cargar productos");
