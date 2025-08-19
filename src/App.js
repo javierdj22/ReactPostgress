@@ -1,7 +1,7 @@
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import Login from "./views/Login";
 import Productos from "./views/Productos";
-import "bootstrap/dist/css/bootstrap.min.css";
+import './index.css'; 
 
 function App() {
   return (

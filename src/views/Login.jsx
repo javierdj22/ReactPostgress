@@ -1,79 +1,85 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useLoginMutation } from "../hooks/useLoginMutation";
+import '../index.css'; // importa las clases anteriores
 
 export default function Login() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState(null);
-
   const navigate = useNavigate();
 
-  const handleSubmit = async (e) => {
+  const loginMutation = useLoginMutation((data) => {
+    localStorage.setItem("token", data.token);
+    navigate("/products");
+  });
+
+  const handleSubmit = (e) => {
     e.preventDefault();
-    setError(null);
-
-    try {
-      const res = await fetch("https://localhost:7275/api/Auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
-      });
-
-      if (!res.ok) {
-        const errData = await res.json();
-        setError(errData.message || "Error en login");
-        return;
-      }
-
-      const data = await res.json();
-      localStorage.setItem("token", data.token);
-
-      navigate("/products");
-    } catch {
-      setError("Error de conexión");
-    }
+    loginMutation.mutate({ username, password });
   };
 
   return (
-    <div className="container" style={{ maxWidth: 400, marginTop: 50 }}>
-      <h2 className="mb-4 text-center">Login</h2>
-      <form onSubmit={handleSubmit}>
-        <div className="mb-3">
-          <label htmlFor="username" className="form-label">Usuario</label>
-          <input
-            type="text"
-            id="username"
-            className="form-control"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            required
-            placeholder="Ingrese usuario"
-          />
-        </div>
-
-        <div className="mb-3">
-          <label htmlFor="password" className="form-label">Contraseña</label>
-          <input
-            type="password"
-            id="password"
-            className="form-control"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            placeholder="Ingrese contraseña"
-          />
-        </div>
-
-        {error && (
-          <div className="alert alert-danger" role="alert">
-            {error}
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+      <div className="max-w-md w-full bg-white rounded-md shadow-md p-8 space-y-6">
+        <h2 className="text-center text-2xl font-semibold text-gray-900">
+          Iniciar sesión
+        </h2>
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <div>
+            <label
+              htmlFor="username"
+              className="block mb-1 text-sm font-medium text-gray-700"
+            >
+              Usuario
+            </label>
+            <input
+              type="text"
+              id="username"
+              className="w-full border border-gray-300 rounded px-3 py-2 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              placeholder="Ingrese usuario"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              required
+            />
           </div>
-        )}
 
-        <button type="submit" className="btn btn-primary w-100">
-          Ingresar
-        </button>
-      </form>
+          <div>
+            <label
+              htmlFor="password"
+              className="block mb-1 text-sm font-medium text-gray-700"
+            >
+              Contraseña
+            </label>
+            <input
+              type="password"
+              id="password"
+              className="w-full border border-gray-300 rounded px-3 py-2 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              placeholder="Ingrese contraseña"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+          </div>
+
+          {loginMutation.error && (
+            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded" role="alert">
+              {loginMutation.error.message}
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={loginMutation.isLoading}
+            className={`w-full py-2 px-4 rounded text-white text-sm font-semibold ${
+              loginMutation.isLoading
+                ? "bg-indigo-300 cursor-not-allowed"
+                : "bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            }`}
+          >
+            {loginMutation.isLoading ? "Ingresando..." : "Ingresar"}
+          </button>
+        </form>
+      </div>
     </div>
   );
 }

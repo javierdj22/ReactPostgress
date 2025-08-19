@@ -1,62 +1,111 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import '../css/ProductosStyles.css';
+
+const token = localStorage.getItem("token");
+
+// Función para obtener productos
+const fetchProductos = async () => {
+  const res = await fetch("http://localhost:5031/api/Productos", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (res.status === 401) throw new Error("No autorizado. Debes iniciar sesión.");
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(errorText || "Error al cargar productos");
+  }
+  return res.json();
+};
+
+// Función para crear o actualizar producto
+const saveProducto = async ({ isEditing, form }) => {
+  const url = isEditing
+    ? `http://localhost:5031/api/productos/${form.id}`
+    : "http://localhost:5031/api/productos";
+
+  const method = isEditing ? "PUT" : "POST";
+
+  const res = await fetch(url, {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      id: isEditing ? form.id : 0,
+      name: form.name,
+      price: parseFloat(form.price),
+      category: form.category,
+    }),
+  });
+
+  if (!res.ok) {
+    const data = await res.json();
+    throw new Error(data.message || "Error al guardar producto");
+  }
+  return res.json();
+};
+
+// Función para eliminar producto
+const deleteProducto = async (id) => {
+  const res = await fetch(`http://localhost:5031/api/productos/${id}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const data = await res.json();
+    throw new Error(data.message || "Error al eliminar producto");
+  }
+  return true;
+};
 
 export const Productos = () => {
-  const [productos, setProductos] = useState([]);
-  const [categorias, setCategorias] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const queryClient = useQueryClient();
 
-  const [form, setForm] = useState({
-    id: null,
-    name: "",
-    price: "",
-    category: ""
-  });
+  const [form, setForm] = useState({ id: null, name: "", price: "", category: "" });
   const [formError, setFormError] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
 
-  const token = localStorage.getItem("token");
-
-  useEffect(() => {
-    fetchProductos();
-  }, []);
-
-  const fetchProductos = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch("https://localhost:7275/api/productos", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.status === 401) {
-        alert("No autorizado. Debes iniciar sesión.");
-        setError("No autorizado");
-        setLoading(false);
-        return;
+  const {
+    data: productos = [],
+    error,
+    isLoading,
+  } = useQuery({
+    queryKey: ["productos"],
+    queryFn: fetchProductos,
+    retry: false,
+    onError: (err) => {
+      if (err.message === "No autorizado. Debes iniciar sesión.") {
+        alert(err.message);
       }
-      if (!res.ok) throw new Error(await res.text() || "Error al cargar productos");
-      const data = await res.json();
-      setProductos(data);
+    },
+  });
 
-      
-    
-    const categoriasUnicas = data.filter((cat, index, self) =>
-      index === self.findIndex((c) => c.category === cat.category)
-    );
-    setCategorias(categoriasUnicas.map(p => ({ id: p.id, name: p.category })));
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const mutationSave = useMutation({
+    mutationFn: saveProducto,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["productos"] });
+      setForm({ id: null, name: "", price: "", category: "" });
+      setIsEditing(false);
+      setFormError(null);
+    },
+    onError: (err) => setFormError(err.message),
+  });
+
+  const mutationDelete = useMutation({
+    mutationFn: deleteProducto,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["productos"] }),
+    onError: (err) => alert(err.message || "Error al eliminar"),
+  });
+
+  const categorias = Array.from(new Set(productos.map((p) => p.category))).map((cat, i) => ({
+    id: i,
+    name: cat,
+  }));
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    console.log("name", name);
-    
-    console.log("value", value);
-    setForm(prev => ({ ...prev, [name]: value }));   
+    setForm(prev => ({ ...prev, [name]: value }));
   };
 
   const validateForm = () => {
@@ -67,39 +116,11 @@ export const Productos = () => {
     return null;
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = (e) => {
     e.preventDefault();
     const validationError = validateForm();
     if (validationError) return setFormError(validationError);
-
-    console.log("Form", form);
-    try {
-      const res = await fetch(
-        isEditing
-          ? `https://localhost:7275/api/productos/${form.id}`
-          : "https://localhost:7275/api/productos",
-        {
-          method: isEditing ? "PUT" : "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`
-          },
-          body: JSON.stringify({
-            id: isEditing? form.id : 0,
-            name: form.name,
-            price: parseFloat(form.price),
-            category: form.category
-          })
-        }
-      );
-      if (!res.ok) throw new Error((await res.json()).message || "Error al guardar producto");
-      fetchProductos();
-      setForm({ id: null, name: "", price: "", category: "" });
-      setIsEditing(false);
-      setFormError(null);
-    } catch (err) {
-      setFormError(err.message);
-    }
+    mutationSave.mutate({ isEditing, form });
   };
 
   const handleEdit = (producto) => {
@@ -107,73 +128,56 @@ export const Productos = () => {
       id: producto.id,
       name: producto.name,
       price: producto.price.toString(),
-      category: producto.category
+      category: producto.category,
     });
     setIsEditing(true);
     setFormError(null);
   };
 
-  const handleDelete = async (id) => {
+  const handleDelete = (id) => {
     if (!window.confirm("¿Seguro que deseas eliminar este producto?")) return;
-    try {
-      const res = await fetch(`https://localhost:7275/api/productos/${id}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (!res.ok) throw new Error((await res.json()).message || "Error al eliminar producto");
-      fetchProductos();
-    } catch (err) {
-      alert(err.message || "Error de conexión");
-    }
+    mutationDelete.mutate(id);
   };
 
   return (
-    <div className="container mt-5">
+    <main className="productos-container">
       <h2>Productos</h2>
 
-      <form onSubmit={handleSubmit} className="mb-4">
-        {/* Nombre */}
-        <div className="mb-3">
-          <label className="form-label">Nombre</label>
+      <form onSubmit={handleSubmit} className="productos-form">
+        <label>
+          Nombre
           <input
             type="text"
             name="name"
-            className="form-control"
             value={form.name}
             onChange={handleChange}
             placeholder="Nombre del producto"
           />
-        </div>
+        </label>
 
-        {/* Precio */}
-        <div className="mb-3">
-          <label className="form-label">Precio</label>
+        <label>
+          Precio
           <input
             type="number"
             name="price"
-            className="form-control"
             value={form.price}
             onChange={handleChange}
             placeholder="Precio"
             step="0.01"
             min="0"
           />
-        </div>
+        </label>
 
-        {/* Categoría */}
-        <div className="mb-3">
-          <label className="form-label">Categoría</label>
+        <label>
+          Categoría
           {isEditing ? (
             <select
               name="category"
-              className="form-control"
               value={form.category}
               onChange={handleChange}
             >
               {categorias.map(cat => (
-                <option key={cat.id} value={cat.name}>
-                  {cat.name}
-                </option>
+                <option key={cat.id} value={cat.name}>{cat.name}</option>
               ))}
             </select>
           ) : (
@@ -181,70 +185,83 @@ export const Productos = () => {
               <input
                 list="categorias"
                 name="category"
-                className="form-control"
                 value={form.category}
                 onChange={handleChange}
                 placeholder="Categoría"
               />
+              <datalist id="categorias">
+                {categorias.map(cat => (
+                  <option key={cat.id} value={cat.name} />
+                ))}
+              </datalist>
             </>
           )}
-        </div>
+        </label>
 
-        {formError && (
-          <div className="alert alert-danger">{formError}</div>
-        )}
+        {formError && <p className="form-error">{formError}</p>}
 
-        <button type="submit" className="btn btn-primary">
-          {isEditing ? "Actualizar" : "Agregar"}
-        </button>
-        {isEditing && (
-          <button
-            type="button"
-            className="btn btn-secondary ms-2"
-            onClick={() => {
-              setForm({ id: null, name: "", price: "", category: "" });
-              setIsEditing(false);
-              setFormError(null);
-            }}
-          >
-            Cancelar
+        <div className="form-buttons">
+          <button type="submit" disabled={mutationSave.isLoading}>
+            {mutationSave.isLoading
+              ? isEditing ? "Actualizando..." : "Guardando..."
+              : isEditing ? "Actualizar" : "Agregar"}
           </button>
-        )}
+
+          {isEditing && (
+            <button
+              type="button"
+              className="btn-cancel"
+              onClick={() => {
+                setForm({ id: null, name: "", price: "", category: "" });
+                setIsEditing(false);
+                setFormError(null);
+              }}
+              disabled={mutationSave.isLoading}
+            >
+              Cancelar
+            </button>
+          )}
+        </div>
       </form>
 
-      {/* Estado de carga */}
-      {loading && (
-        <div className="text-center mt-5">
-          <div className="spinner-border" role="status"></div>
-        </div>
-      )}
-      {error && (
-        <div className="alert alert-danger">{error}</div>
-      )}
-      {!loading && !error && productos.length === 0 && (
-        <div className="alert alert-info">No hay productos para mostrar.</div>
+      {isLoading && (
+        <div className="loader" aria-label="Cargando productos..."></div>
       )}
 
-      {/* Lista */}
-      <ul className="list-group">
+      {error && <p className="error-message">{error.message}</p>}
+
+      {!isLoading && !error && productos.length === 0 && (
+        <p className="info-message">No hay productos para mostrar.</p>
+      )}
+
+      <ul className="productos-list">
         {productos.map(p => (
-          <li key={p.id} className="list-group-item d-flex justify-content-between align-items-center">
-            <div>
+          <li key={p.id} className="producto-item">
+            <div className="producto-info">
               <strong>{p.name}</strong> – S/ {p.price.toFixed(2)}
-              <span className="badge bg-info ms-2">{p.category}</span>
+              <span className="producto-category">{p.category}</span>
             </div>
-            <div>
-              <button className="btn btn-sm btn-outline-primary me-2" onClick={() => handleEdit(p)}>
+            <div className="producto-actions">
+              <button
+                onClick={() => handleEdit(p)}
+                disabled={mutationSave.isLoading}
+                aria-label={`Editar ${p.name}`}
+              >
                 Editar
               </button>
-              <button className="btn btn-sm btn-outline-danger" onClick={() => handleDelete(p.id)}>
+              <button
+                onClick={() => handleDelete(p.id)}
+                disabled={mutationDelete.isLoading}
+                aria-label={`Eliminar ${p.name}`}
+                className="btn-delete"
+              >
                 Eliminar
               </button>
             </div>
           </li>
         ))}
       </ul>
-    </div>
+    </main>
   );
 };
 
