@@ -1,0 +1,32 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v2
+      with:
+        node-version: '18'
+        
+    - name: Install Dependencies
+      run: npm install
+        
+    - name: Build
+      run: npm run build
+      
+    - name: Trigger n8n Webhook
+      if: success() && github.ref == 'refs/heads/main'
+      run: |
+        curl -X POST ${{ secrets.N8N_WEBHOOK_URL }} \
+        -H "Content-Type: application/json" \
+        -d '{"repository": "${{ github.repository }}", "commit": "${{ github.sha }}"}'
